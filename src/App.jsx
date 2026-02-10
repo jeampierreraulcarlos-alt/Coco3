@@ -78,27 +78,40 @@ export default function App() {
   const totalFinal = subtotal + costoEnvio;
 
   const enviar = async () => {
-    if(!form.nombre || !form.dir || form.zonaCosto == 0) return alert("Por favor, completa nombre, dirección y zona.");
+    // 1. Validaciones básicas
+    if(!form.nombre || !form.dir || form.zonaCosto == 0) {
+      return alert("Por favor, completa nombre, dirección y selecciona una zona.");
+    }
+    
     setProcesando(true);
     
-    const pedido = {
-      nombre: form.nombre,
-      direccion: form.dir,
-      zona: form.zonaNombre,
-      total: totalFinal,
-      items: itemsCarrito.map(k => ({ n: `${carrito[k].q}x ${k}`, p: carrito[k].q * carrito[k].p }))
-    };
+    // 2. Armamos el mensaje de WhatsApp aquí mismo (sin esperar al servidor)
+    const itemsTexto = itemsCarrito.map(k => `- ${carrito[k].q}x ${k} ($${carrito[k].q * carrito[k].p})`).join('\n');
+    const mensaje = `*NUEVO PEDIDO DE LA WEB* 🍦\n\n*Cliente:* ${form.nombre}\n*Dirección:* ${form.dir}\n*Zona:* ${form.zonaNombre}\n\n*Pedido:*\n${itemsTexto}\n\n*Envío:* $${costoEnvio}\n*TOTAL FINAL: $${totalFinal}*\n\n*Notas:* ${form.notas}`;
+    
+    // 3. Obtenemos el número del Excel (o usamos uno por defecto si falla)
+    const numeroWhatsApp = datos.config.whatsapp_negocio || "5491138416200"; 
+    
+    // 4. Abrimos WhatsApp INMEDIATAMENTE
+    const url = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(mensaje)}`;
+    window.open(url, '_blank');
 
+    // 5. Enviamos a Google Sheets en "segundo plano" para que quede registrado
     try {
-      const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(pedido) });
-      const data = await res.json();
-      window.open(data.whatsappUrl, '_blank');
-      setCarrito({});
-      setModalOpen(false);
+      const pedidoParaGoogle = {
+        nombre: form.nombre,
+        direccion: form.dir,
+        zona: form.zonaNombre,
+        total: totalFinal,
+        items: itemsCarrito.map(k => ({ n: `${carrito[k].q}x ${k}`, p: carrito[k].q * carrito[k].p }))
+      };
+      await fetch(API_URL, { method: 'POST', body: JSON.stringify(pedidoParaGoogle) });
     } catch (e) {
-      alert("Error al enviar pedido.");
+      console.log("El pedido se abrió en WhatsApp pero falló al guardarse en Excel (no es grave).");
     } finally {
       setProcesando(false);
+      setCarrito({});
+      setModalOpen(false);
     }
   };
 
